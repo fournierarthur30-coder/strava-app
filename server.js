@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require("path");
 const axios = require('axios');
 
 const app = express();
@@ -10,6 +11,13 @@ const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 const CLIENT_ID = process.env.STRAVA_CLIENT_ID;
 const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI;
+
+app.use(express.static(path.join(__dirname, "public")));
+
+
+app.listen(3000, () => {
+  console.log("Serveur lancé sur http://localhost:3000");
+});
 
 let userTokens = {};
 let trainingProgress = {};
@@ -28,35 +36,34 @@ app.get('/', (req, res) => {
             min-height: 100vh;
             display: flex;
             align-items: center;
-            justify-content: center;
           }
           .container {
             text-align: center;
-            padding: 50px;
-            max-width: 600px;
+            padding: 20px;
+
           }
           .logo { 
-            font-size: 80px;
-            margin-bottom: 30px;
+            width: 10%;
+            height: 900px;
           }
           h1 { 
-            font-size: 42px;
+            font-size: 60px;
             font-weight: 600;
             margin-bottom: 12px;
             color: #fff;
           }
           p {
-            font-size: 16px;
+            font-size: 24px;
             color: #888;
             margin-bottom: 40px;
           }
           .connect-btn { 
             background: #3b82f6;
             color: white;
-            padding: 14px 32px;
+            padding: 24px 64px;
             text-decoration: none;
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 30px;
             font-weight: 500;
             display: inline-block;
             transition: all 0.2s;
@@ -76,17 +83,19 @@ app.get('/', (req, res) => {
           }
           .feature {
             background: #111;
-            padding: 12px 20px;
+            padding: 24px 40px;
             border-radius: 8px;
             border: 1px solid #222;
-            font-size: 13px;
+            font-size: 26px;
             color: #888;
           }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="logo">🏃‍♂️</div>
+          <div class="logo">
+            <img src="/logo.png" alt="Mon logo">
+          </div>
           <h1>Mon Coach Running</h1>
           <p>Analyse tes performances et progresse</p>
           <a href="/auth/strava" class="connect-btn">Se connecter avec Strava</a>
@@ -159,7 +168,7 @@ app.get('/dashboard', async (req, res) => {
     const runs = activities.filter(a => a.type === 'Run');
     const badges = calculateBadges(runs, athleteId);
     
-    let html = `<html><head><title>Dashboard</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 1200px; margin: 0 auto; } .welcome { font-size: 28px; font-weight: 600; color: #fff; margin-bottom: 6px; } .subtitle { color: #666; font-size: 14px; } .container { max-width: 600px; margin: 0 auto; padding: 30px 20px; } .nav { display: flex; gap: 12px; margin: 25px 0; flex-wrap: wrap; } .nav-btn { background: #111; color: #888; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1px solid #222; transition: all 0.2s; } .nav-btn:hover { background: #1a1a1a; color: #fff; border-color: #333; } .nav-btn.special { background: #3b82f6; color: #fff; border-color: #3b82f6; } .badges-section { margin: 30px 0; } .section-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 16px; } .badges-grid { display: flex; gap: 12px; flex-wrap: wrap; } .badge-pill { background: #111; border: 1px solid #222; padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; } .badge-pill:hover { background: #1a1a1a; border-color: #333; } .badge-icon { font-size: 18px; } .badge-text { color: #ccc; font-weight: 500; } h2 { margin: 40px 0 20px 0; font-size: 18px; font-weight: 600; color: #fff; } .activity { background: #111; padding: 20px; margin: 12px 0; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #222; } .activity:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } .activity h3 { font-size: 16px; font-weight: 600; margin-bottom: 10px; color: #fff; } .stats { color: #888; display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; } .stats > div { display: flex; align-items: center; gap: 6px; }</style></head><body><div class="header"><div class="header-content"><div class="welcome">Salut ${user.athlete.firstname}</div><div class="subtitle">Tableau de bord</div></div></div><div class="container"><div class="nav"><a href="/analyses" class="nav-btn">Analyses</a><a href="/progression" class="nav-btn">Progression</a><a href="/records" class="nav-btn">Records</a><a href="/prediction" class="nav-btn">Prédictions</a><a href="/programme" class="nav-btn">Programme</a><a href="/run-in-lyon" class="nav-btn special">Run In Lyon 2026</a></div>${badges.length > 0 ? `<div class="badges-section"><div class="section-title">Badges débloqués</div><div class="badges-grid">${badges.map(badge => `<div class="badge-pill"><span class="badge-icon">${badge.icon}</span><span class="badge-text">${badge.name}</span></div>`).join('')}</div></div>` : ''}<h2>Activités récentes</h2>`;
+    let html = `<html><head><title>Dashboard</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 900px; margin: 0 auto; } .welcome { font-size: 50px; font-weight: 600; color: #fff; margin-bottom: 6px; } .subtitle { color: #666; font-size: 24px; } .container { max-width: 600px; margin: 0 auto; padding: 30px 20px; } .nav { display: flex; gap: 50px; margin: 15px 0; flex-wrap: wrap; } .nav-btn { background: #111; color: #888; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-size: 40px; font-weight: 500; border: 1px solid #222; transition: all 0.2s; } .nav-btn:hover { background: #1a1a1a; color: #fff; border-color: #333; } .nav-btn.special { background: #3b82f6; color: #fff; border-color: #3b82f6; } .badges-section { margin: 30px 0; } .section-title { font-size: 30px; font-weight: 600; color: #fff; margin-bottom: 16px; } .badges-grid { display: flex; gap: 12px; flex-wrap: wrap; } .badge-pill { background: #111; border: 1px solid #f7ce11; padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; font-size: 30px; transition: all 0.2s; } .badge-pill:hover { background: #1a1a1a; border-color: #333; } .badge-icon { font-size: 30px; } .badge-text { color: #ccc; font-weight: 500; } h2 { margin: 40px 0 20px 0; font-size: 30px; font-weight: 600; color: #fff; } .activity { background: #111; padding: 60px; margin: 25px 0; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #222; } .activity:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } .activity h3 { font-size: 30px; font-weight: 600; margin-bottom: 10px; color: #fff; } .stats { color: #888; display: flex; gap: 20px; flex-wrap: wrap; font-size: 30px; } .stats > div { display: flex; align-items: center; gap: 6px; }</style></head><body><div class="header"><div class="header-content"><div class="welcome">Salut ${user.athlete.firstname}</div><div class="subtitle">Tableau de bord</div></div></div><div class="container"><div class="nav"><a href="/analyses" class="nav-btn">Analyses</a><a href="/progression" class="nav-btn">Progression</a><a href="/records" class="nav-btn">Records</a><a href="/prediction" class="nav-btn">Prédictions</a><a href="/programme" class="nav-btn">Programme</a><a href="/run-in-lyon" class="nav-btn special">Run In Lyon 2026</a></div>${badges.length > 0 ? `<div class="badges-section"><div class="section-title">Badges débloqués</div><div class="badges-grid">${badges.map(badge => `<div class="badge-pill"><span class="badge-icon">${badge.icon}</span><span class="badge-text">${badge.name}</span></div>`).join('')}</div></div>` : ''}<h2>Activités récentes</h2>`;
 
     activities.forEach(a => {
       const dist = (a.distance / 1000).toFixed(2);
@@ -220,7 +229,7 @@ app.get('/progression', async (req, res) => {
     const distances = JSON.stringify(weeklyArray.map(w => w.distance));
     const paces = JSON.stringify(weeklyArray.map(w => w.pace));
     
-    res.send(`<html><head><title>Progression</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>body { font-family: Arial; background: #f5f7fa; margin: 0; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; } .container { max-width: 1200px; margin: 0 auto; padding: 20px; } .nav a { color: #667eea; text-decoration: none; font-weight: 600; margin-right: 20px; } .chart-container { background: white; padding: 25px; margin: 20px 0; border-radius: 10px; }</style></head><body><div class="header"><div class="container"><h1>📈 Ma Progression</h1></div></div><div class="container"><div class="nav"><a href="/dashboard">← Dashboard</a></div><div class="chart-container"><h2>Distance/semaine (km)</h2><canvas id="distanceChart"></canvas></div><div class="chart-container"><h2>Allure moyenne (min/km)</h2><canvas id="paceChart"></canvas></div></div><script>new Chart(document.getElementById('distanceChart'), { type: 'bar', data: { labels: ${weeks}, datasets: [{ label: 'Distance (km)', data: ${distances}, backgroundColor: 'rgba(102, 126, 234, 0.6)', borderColor: 'rgba(102, 126, 234, 1)', borderWidth: 2 }] }, options: { responsive: true, scales: { y: { beginAtZero: true } } } }); new Chart(document.getElementById('paceChart'), { type: 'line', data: { labels: ${weeks}, datasets: [{ label: 'Allure (min/km)', data: ${paces}, backgroundColor: 'rgba(118, 75, 162, 0.2)', borderColor: 'rgba(118, 75, 162, 1)', borderWidth: 2, fill: true, tension: 0.4 }] }, options: { responsive: true, scales: { y: { reverse: true } } } });</script></body></html>`);
+    res.send(`<html><head><title>Progression</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>body { font-family: Arial; background: #f5f7fa; margin: 0; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; } .container { max-width: 915px; margin: 0 auto; padding: 20px; } .nav a { color: #667eea; text-decoration: none; font-weight: 600; margin-right: 20px; } .chart-container { background: white; padding: 25px; margin: 20px 0; border-radius: 10px; }</style></head><body><div class="header"><div class="container"><h1>📈 Ma Progression</h1></div></div><div class="container"><div class="nav"><a href="/dashboard">← Dashboard</a></div><div class="chart-container"><h2>Distance/semaine (km)</h2><canvas id="distanceChart"></canvas></div><div class="chart-container"><h2>Allure moyenne (min/km)</h2><canvas id="paceChart"></canvas></div></div><script>new Chart(document.getElementById('distanceChart'), { type: 'bar', data: { labels: ${weeks}, datasets: [{ label: 'Distance (km)', data: ${distances}, backgroundColor: 'rgba(102, 126, 234, 0.6)', borderColor: 'rgba(102, 126, 234, 1)', borderWidth: 2 }] }, options: { responsive: true, scales: { y: { beginAtZero: true } } } }); new Chart(document.getElementById('paceChart'), { type: 'line', data: { labels: ${weeks}, datasets: [{ label: 'Allure (min/km)', data: ${paces}, backgroundColor: 'rgba(118, 75, 162, 0.2)', borderColor: 'rgba(118, 75, 162, 1)', borderWidth: 2, fill: true, tension: 0.4 }] }, options: { responsive: true, scales: { y: { reverse: true } } } });</script></body></html>`);
   } catch (error) {
     res.send('Erreur');
   }
