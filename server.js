@@ -12,6 +12,7 @@ const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI;
 
 let userTokens = {};
+let trainingProgress = {};
 
 app.get('/', (req, res) => {
   res.send(`
@@ -21,101 +22,65 @@ app.get('/', (req, res) => {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
-            font-family: 'SF Pro Display', -apple-system, Arial;
-            background: #000;
-            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            position: relative;
-            overflow: hidden;
-          }
-          body::before {
-            content: '';
-            position: absolute;
-            width: 800px;
-            height: 800px;
-            background: radial-gradient(circle, rgba(255,51,102,0.3) 0%, transparent 70%);
-            top: -200px;
-            right: -200px;
-            animation: pulse 4s ease-in-out infinite;
-          }
-          body::after {
-            content: '';
-            position: absolute;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%);
-            bottom: -150px;
-            left: -150px;
-            animation: pulse 5s ease-in-out infinite;
-          }
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 0.5; }
-            50% { transform: scale(1.1); opacity: 0.7; }
           }
           .container {
             text-align: center;
-            position: relative;
-            z-index: 1;
             padding: 50px;
+            max-width: 600px;
           }
           .logo { 
-            font-size: 120px;
+            font-size: 80px;
             margin-bottom: 30px;
-            animation: float 3s ease-in-out infinite;
-          }
-          @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-20px); }
           }
           h1 { 
-            font-size: 72px;
-            font-weight: 900;
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, #ff3366 0%, #ff6b9d 50%, #6366f1 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -3px;
+            font-size: 42px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #fff;
           }
           p {
-            font-size: 24px;
-            color: rgba(255,255,255,0.7);
-            margin-bottom: 50px;
-            font-weight: 300;
+            font-size: 16px;
+            color: #888;
+            margin-bottom: 40px;
           }
           .connect-btn { 
-            background: linear-gradient(135deg, #ff3366 0%, #ff6b9d 100%);
+            background: #3b82f6;
             color: white;
-            padding: 20px 50px;
+            padding: 14px 32px;
             text-decoration: none;
-            border-radius: 50px;
-            font-size: 20px;
-            font-weight: 700;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
             display: inline-block;
-            transition: all 0.3s;
-            box-shadow: 0 10px 40px rgba(255,51,102,0.4);
+            transition: all 0.2s;
             border: none;
             cursor: pointer;
           }
           .connect-btn:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 50px rgba(255,51,102,0.6);
+            background: #2563eb;
+            transform: translateY(-2px);
           }
           .features {
             display: flex;
-            gap: 30px;
+            gap: 16px;
             justify-content: center;
-            margin-top: 60px;
+            margin-top: 50px;
             flex-wrap: wrap;
           }
           .feature {
-            background: rgba(255,255,255,0.05);
-            padding: 20px 30px;
-            border-radius: 20px;
-            border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
+            background: #111;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid #222;
+            font-size: 13px;
+            color: #888;
           }
         </style>
       </head>
@@ -123,13 +88,13 @@ app.get('/', (req, res) => {
         <div class="container">
           <div class="logo">🏃‍♂️</div>
           <h1>Mon Coach Running</h1>
-          <p>Analyse • Prédis • Progresse</p>
+          <p>Analyse tes performances et progresse</p>
           <a href="/auth/strava" class="connect-btn">Se connecter avec Strava</a>
           <div class="features">
-            <div class="feature">📈 Graphiques de progression</div>
-            <div class="feature">🏆 Records personnels</div>
-            <div class="feature">🔮 Prédictions</div>
-            <div class="feature">📋 Programmes sur mesure</div>
+            <div class="feature">Graphiques</div>
+            <div class="feature">Records</div>
+            <div class="feature">Prédictions</div>
+            <div class="feature">Programmes</div>
           </div>
         </div>
       </body>
@@ -168,13 +133,33 @@ app.get('/dashboard', async (req, res) => {
   const user = userTokens[athleteId];
 
   try {
-    const activitiesResponse = await axios.get('https://www.strava.com/api/v3/athlete/activities', {
-      headers: { 'Authorization': `Bearer ${user.accessToken}` },
-      params: { per_page: 10 }
-    });
+    // Récupérer TOUTES les activités (pagination)
+    let allActivities = [];
+    let page = 1;
+    let hasMore = true;
+    
+    while (hasMore && page <= 10) { // Max 10 pages = 2000 activités
+      const activitiesResponse = await axios.get('https://www.strava.com/api/v3/athlete/activities', {
+        headers: { 'Authorization': `Bearer ${user.accessToken}` },
+        params: { per_page: 200, page: page }
+      });
+      
+      const activities = activitiesResponse.data;
+      if (activities.length === 0) {
+        hasMore = false;
+      } else {
+        allActivities = allActivities.concat(activities);
+        page++;
+      }
+    }
 
-    const activities = activitiesResponse.data;
-    let html = `<html><head><title>Dashboard</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: 'SF Pro Display', -apple-system, Arial; background: #000; color: #fff; } .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 50px 30px; border-bottom: 1px solid rgba(255,255,255,0.1); } .header-content { max-width: 1400px; margin: 0 auto; } .welcome { font-size: 48px; font-weight: 800; margin-bottom: 10px; background: linear-gradient(135deg, #ff3366 0%, #6366f1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; } .subtitle { color: rgba(255,255,255,0.6); font-size: 18px; } .container { max-width: 1400px; margin: 0 auto; padding: 40px 20px; } .nav { display: flex; gap: 15px; margin: 30px 0; flex-wrap: wrap; } .nav-btn { background: linear-gradient(135deg, rgba(255,51,102,0.1) 0%, rgba(99,102,241,0.1) 100%); color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 16px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; display: inline-block; } .nav-btn:hover { background: linear-gradient(135deg, rgba(255,51,102,0.2) 0%, rgba(99,102,241,0.2) 100%); transform: translateY(-2px); border-color: rgba(255,51,102,0.5); } .nav-btn.special { background: linear-gradient(135deg, #ff3366 0%, #ff6b9d 100%); animation: pulse 2s infinite; box-shadow: 0 0 30px rgba(255,51,102,0.4); } h2 { margin: 50px 0 25px 0; font-size: 32px; font-weight: 800; } .activity { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 25px; margin: 20px 0; border-radius: 20px; cursor: pointer; transition: all 0.3s; border: 1px solid rgba(255,255,255,0.1); position: relative; overflow: hidden; } .activity::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #ff3366, #6366f1); opacity: 0; transition: opacity 0.3s; } .activity:hover { transform: translateY(-5px); box-shadow: 0 10px 40px rgba(255,51,102,0.2); border-color: rgba(255,51,102,0.3); } .activity:hover::before { opacity: 1; } .activity h3 { font-size: 20px; margin-bottom: 15px; color: #fff; } .stats { color: rgba(255,255,255,0.7); display: flex; gap: 25px; flex-wrap: wrap; font-size: 15px; } .stats > div { display: flex; align-items: center; gap: 8px; }</style></head><body><div class="header"><div class="header-content"><div class="welcome">👋 Bienvenue ${user.athlete.firstname} !</div><div class="subtitle">Ton coach running personnel</div></div></div><div class="container"><div class="nav"><a href="/progression" class="nav-btn">📈 Progression</a><a href="/records" class="nav-btn">🏆 Records</a><a href="/prediction" class="nav-btn">🔮 Prédictions</a><a href="/programme" class="nav-btn">📋 Programme</a><a href="/run-in-lyon" class="nav-btn special">🏃‍♂️ Run In Lyon 2026</a></div><h2>Dernières activités</h2>`;
+    const activities = allActivities;
+    
+    // Calculer les badges
+    const runs = activities.filter(a => a.type === 'Run');
+    const badges = calculateBadges(runs, athleteId);
+    
+    let html = `<html><head><title>Dashboard</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 1200px; margin: 0 auto; } .welcome { font-size: 28px; font-weight: 600; color: #fff; margin-bottom: 6px; } .subtitle { color: #666; font-size: 14px; } .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; } .nav { display: flex; gap: 12px; margin: 25px 0; flex-wrap: wrap; } .nav-btn { background: #111; color: #888; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1px solid #222; transition: all 0.2s; } .nav-btn:hover { background: #1a1a1a; color: #fff; border-color: #333; } .nav-btn.special { background: #3b82f6; color: #fff; border-color: #3b82f6; } .badges-section { margin: 30px 0; } .section-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 16px; } .badges-grid { display: flex; gap: 12px; flex-wrap: wrap; } .badge-pill { background: #111; border: 1px solid #222; padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; } .badge-pill:hover { background: #1a1a1a; border-color: #333; } .badge-icon { font-size: 18px; } .badge-text { color: #ccc; font-weight: 500; } h2 { margin: 40px 0 20px 0; font-size: 18px; font-weight: 600; color: #fff; } .activity { background: #111; padding: 20px; margin: 12px 0; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #222; } .activity:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } .activity h3 { font-size: 16px; font-weight: 600; margin-bottom: 10px; color: #fff; } .stats { color: #888; display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; } .stats > div { display: flex; align-items: center; gap: 6px; }</style></head><body><div class="header"><div class="header-content"><div class="welcome">Salut ${user.athlete.firstname}</div><div class="subtitle">Tableau de bord</div></div></div><div class="container"><div class="nav"><a href="/analyses" class="nav-btn">Analyses</a><a href="/progression" class="nav-btn">Progression</a><a href="/records" class="nav-btn">Records</a><a href="/prediction" class="nav-btn">Prédictions</a><a href="/programme" class="nav-btn">Programme</a><a href="/run-in-lyon" class="nav-btn special">Run In Lyon 2026</a></div>${badges.length > 0 ? `<div class="badges-section"><div class="section-title">Badges débloqués</div><div class="badges-grid">${badges.map(badge => `<div class="badge-pill"><span class="badge-icon">${badge.icon}</span><span class="badge-text">${badge.name}</span></div>`).join('')}</div></div>` : ''}<h2>Activités récentes</h2>`;
 
     activities.forEach(a => {
       const dist = (a.distance / 1000).toFixed(2);
@@ -264,7 +249,7 @@ app.get('/records', async (req, res) => {
     const longestRun = runs.reduce((longest, run) => run.distance > (longest.distance || 0) ? run : longest, runs[0] || {});
     const biggestElevationRun = runs.reduce((biggest, run) => (run.total_elevation_gain || 0) > (biggest.total_elevation_gain || 0) ? run : biggest, runs[0] || {});
     
-    res.send(`<html><head><title>Records</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: 'SF Pro Display', -apple-system, Arial; background: #000; color: #fff; } .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 50px 30px; border-bottom: 1px solid rgba(255,255,255,0.1); } .header-content { max-width: 1400px; margin: 0 auto; } h1 { font-size: 48px; font-weight: 800; background: linear-gradient(135deg, #ff3366 0%, #ffd700 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; } .container { max-width: 1400px; margin: 0 auto; padding: 40px 20px; } .nav { margin: 30px 0; display: flex; gap: 15px; flex-wrap: wrap; } .nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; } .nav a:hover { color: #ff3366; border-color: rgba(255,51,102,0.5); background: rgba(255,51,102,0.1); } .records-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; margin: 40px 0; } .record-card { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); position: relative; overflow: hidden; transition: all 0.3s; } .record-card:hover { transform: translateY(-5px); box-shadow: 0 20px 60px rgba(255,215,0,0.2); border-color: rgba(255,215,0,0.3); } .record-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; } .record-card:nth-child(1)::before { background: linear-gradient(90deg, #ffd700, #ffed4e); } .record-card:nth-child(2)::before { background: linear-gradient(90deg, #ff3366, #ff6b9d); } .record-card:nth-child(3)::before { background: linear-gradient(90deg, #6366f1, #8b5cf6); } .record-icon { font-size: 64px; margin-bottom: 20px; } .record-title { font-size: 16px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; font-weight: 600; } .record-value { font-size: 48px; font-weight: 900; margin: 20px 0; } .record-card:nth-child(1) .record-value { background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; } .record-card:nth-child(2) .record-value { background: linear-gradient(135deg, #ff3366 0%, #ff6b9d 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; } .record-card:nth-child(3) .record-value { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; } .record-activity { color: rgba(255,255,255,0.5); font-size: 15px; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); line-height: 1.8; } .record-date { color: rgba(255,255,255,0.4); font-size: 13px; margin-top: 8px; }</style></head><body><div class="header"><div class="header-content"><h1>🏆 Mes Records Personnels</h1></div></div><div class="container"><div class="nav"><a href="/dashboard">← Dashboard</a><a href="/progression">📈 Progression</a><a href="/prediction">🔮 Prédictions</a></div><div class="records-grid"><div class="record-card"><div class="record-icon">⚡</div><div class="record-title">Meilleure Allure</div><div class="record-value">${bestPace} /km</div><div class="record-activity"><strong>${bestPaceRun.name || 'N/A'}</strong><br>${(bestPaceRun.distance / 1000).toFixed(2)} km<div class="record-date">${bestPaceRun.start_date ? new Date(bestPaceRun.start_date).toLocaleDateString('fr-FR') : ''}</div></div></div><div class="record-card"><div class="record-icon">📏</div><div class="record-title">Plus Longue Distance</div><div class="record-value">${(longestRun.distance / 1000).toFixed(2)} km</div><div class="record-activity"><strong>${longestRun.name || 'N/A'}</strong><br>${Math.floor((longestRun.moving_time || 0) / 60)} minutes<div class="record-date">${longestRun.start_date ? new Date(longestRun.start_date).toLocaleDateString('fr-FR') : ''}</div></div></div><div class="record-card"><div class="record-icon">⛰️</div><div class="record-title">Plus Gros Dénivelé</div><div class="record-value">${Math.round(biggestElevationRun.total_elevation_gain || 0)} m</div><div class="record-activity"><strong>${biggestElevationRun.name || 'N/A'}</strong><br>${(biggestElevationRun.distance / 1000).toFixed(2)} km<div class="record-date">${biggestElevationRun.start_date ? new Date(biggestElevationRun.start_date).toLocaleDateString('fr-FR') : ''}</div></div></div></div></div></body></html>`);
+    res.send(`<html><head><title>Records</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 1200px; margin: 0 auto; } h1 { font-size: 28px; font-weight: 600; color: #fff; } .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; } .nav { margin: 20px 0; display: flex; gap: 12px; flex-wrap: wrap; } .nav a { color: #888; text-decoration: none; font-size: 13px; font-weight: 500; padding: 8px 16px; border-radius: 6px; border: 1px solid #222; background: #111; transition: all 0.2s; } .nav a:hover { color: #fff; background: #1a1a1a; border-color: #333; } .records-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 30px 0; } .record-card { background: #111; padding: 28px; border-radius: 10px; border: 1px solid #222; transition: all 0.2s; } .record-card:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } .record-icon { font-size: 42px; margin-bottom: 16px; } .record-title { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; font-weight: 500; } .record-value { font-size: 36px; font-weight: 600; color: #fff; margin: 16px 0; } .record-activity { color: #888; font-size: 13px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #1a1a1a; line-height: 1.6; } .record-date { color: #666; font-size: 12px; margin-top: 8px; }</style></head><body><div class="header"><div class="header-content"><h1>Records Personnels</h1></div></div><div class="container"><div class="nav"><a href="/dashboard">← Retour</a><a href="/progression">Progression</a><a href="/prediction">Prédictions</a></div><div class="records-grid"><div class="record-card"><div class="record-icon">⚡</div><div class="record-title">Meilleure Allure</div><div class="record-value">${bestPace} /km</div><div class="record-activity">${bestPaceRun.name || 'N/A'}<br>${(bestPaceRun.distance / 1000).toFixed(2)} km<div class="record-date">${bestPaceRun.start_date ? new Date(bestPaceRun.start_date).toLocaleDateString('fr-FR') : ''}</div></div></div><div class="record-card"><div class="record-icon">📏</div><div class="record-title">Plus Longue Distance</div><div class="record-value">${(longestRun.distance / 1000).toFixed(2)} km</div><div class="record-activity">${longestRun.name || 'N/A'}<br>${Math.floor((longestRun.moving_time || 0) / 60)} minutes<div class="record-date">${longestRun.start_date ? new Date(longestRun.start_date).toLocaleDateString('fr-FR') : ''}</div></div></div><div class="record-card"><div class="record-icon">⛰️</div><div class="record-title">Plus Gros Dénivelé</div><div class="record-value">${Math.round(biggestElevationRun.total_elevation_gain || 0)} m</div><div class="record-activity">${biggestElevationRun.name || 'N/A'}<br>${(biggestElevationRun.distance / 1000).toFixed(2)} km<div class="record-date">${biggestElevationRun.start_date ? new Date(biggestElevationRun.start_date).toLocaleDateString('fr-FR') : ''}</div></div></div></div></div></body></html>`);
   } catch (error) {
     res.send('Erreur');
   }
@@ -389,7 +374,90 @@ app.get('/programme', async (req, res) => {
   }
 });
 
-// DETAIL D'UNE ACTIVITE
+// BADGES - Calcul des achievements
+function calculateBadges(runs, athleteId) {
+  const badges = [];
+  const totalDistance = runs.reduce((sum, r) => sum + r.distance / 1000, 0);
+  const totalRuns = runs.length;
+  
+  // Badges distance
+  if (totalDistance >= 1000) badges.push({ icon: '🌍', name: 'Globe Trotter', desc: '1000 km parcourus', color: '#ffd700' });
+  else if (totalDistance >= 500) badges.push({ icon: '🚀', name: 'Marathonien', desc: '500 km parcourus', color: '#ff6b9d' });
+  else if (totalDistance >= 100) badges.push({ icon: '⭐', name: 'Centurion', desc: '100 km parcourus', color: '#6366f1' });
+  
+  // Badges nombre de courses
+  if (totalRuns >= 100) badges.push({ icon: '💯', name: 'Centenaire', desc: '100 courses', color: '#ffd700' });
+  else if (totalRuns >= 50) badges.push({ icon: '🔥', name: 'Assidu', desc: '50 courses', color: '#ff6b9d' });
+  else if (totalRuns >= 10) badges.push({ icon: '👟', name: 'Débutant Pro', desc: '10 courses', color: '#6366f1' });
+  
+  // Badge meilleure allure
+  const bestPaceRun = runs.reduce((best, run) => {
+    const pace = run.distance > 0 ? (run.moving_time / 60) / (run.distance / 1000) : Infinity;
+    const bestPace = best.distance > 0 ? (best.moving_time / 60) / (best.distance / 1000) : Infinity;
+    return pace < bestPace ? run : best;
+  }, runs[0] || {});
+  const bestPace = bestPaceRun.distance > 0 ? (bestPaceRun.moving_time / 60) / (bestPaceRun.distance / 1000) : 0;
+  
+  if (bestPace > 0 && bestPace < 4.5) badges.push({ icon: '⚡', name: 'Vitesse Éclair', desc: 'Allure < 4:30/km', color: '#ffd700' });
+  else if (bestPace > 0 && bestPace < 5.5) badges.push({ icon: '💨', name: 'Rapide', desc: 'Allure < 5:30/km', color: '#6366f1' });
+  
+  // Badge longue distance
+  const longestRun = runs.reduce((longest, run) => run.distance > (longest.distance || 0) ? run : longest, runs[0] || {});
+  if (longestRun.distance >= 42195) badges.push({ icon: '🏅', name: 'Marathonien', desc: 'Marathon complet', color: '#ffd700' });
+  else if (longestRun.distance >= 21000) badges.push({ icon: '🎖️', name: 'Semi-Marathonien', desc: 'Semi-marathon', color: '#ff6b9d' });
+  
+  // Badge régularité (courses cette semaine)
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const runsThisWeek = runs.filter(r => new Date(r.start_date) > oneWeekAgo).length;
+  if (runsThisWeek >= 5) badges.push({ icon: '📅', name: 'Ultra Régulier', desc: '5+ courses/semaine', color: '#10b981' });
+  else if (runsThisWeek >= 3) badges.push({ icon: '✅', name: 'Régulier', desc: '3+ courses/semaine', color: '#6366f1' });
+  
+  return badges;
+}
+
+// PAGE ANALYSES AVANCEES
+app.get('/analyses', async (req, res) => {
+  const athleteId = Object.keys(userTokens)[0];
+  if (!athleteId) return res.redirect('/');
+  const user = userTokens[athleteId];
+
+  try {
+    const activitiesResponse = await axios.get('https://www.strava.com/api/v3/athlete/activities', {
+      headers: { 'Authorization': `Bearer ${user.accessToken}` },
+      params: { per_page: 200 }
+    });
+
+    const runs = activitiesResponse.data.filter(a => a.type === 'Run');
+    
+    // Calcul cadence moyenne globale
+    const runsWithCadence = runs.filter(r => r.average_cadence);
+    const avgCadence = runsWithCadence.length > 0 
+      ? Math.round(runsWithCadence.reduce((sum, r) => sum + r.average_cadence * 2, 0) / runsWithCadence.length) 
+      : 0;
+    
+    // Variabilité d'allure (écart-type des allures)
+    const paces = runs.filter(r => r.distance > 1000).map(r => (r.moving_time / 60) / (r.distance / 1000));
+    const avgPace = paces.reduce((sum, p) => sum + p, 0) / paces.length;
+    const variance = paces.reduce((sum, p) => sum + Math.pow(p - avgPace, 2), 0) / paces.length;
+    const stdDev = Math.sqrt(variance);
+    const variability = (stdDev / avgPace * 100).toFixed(1);
+    
+    // Graphique temps vs distance
+    const timeDistanceData = runs.slice(0, 30).reverse().map(r => ({
+      name: new Date(r.start_date).toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' }),
+      distance: (r.distance / 1000).toFixed(1),
+      time: Math.round(r.moving_time / 60)
+    }));
+    
+    res.send(`<html><head><title>Analyses Avancées</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 1200px; margin: 0 auto; } h1 { font-size: 28px; font-weight: 600; color: #fff; } .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; } .nav { margin: 20px 0; display: flex; gap: 12px; flex-wrap: wrap; } .nav a { color: #888; text-decoration: none; font-size: 13px; font-weight: 500; padding: 8px 16px; border-radius: 6px; border: 1px solid #222; background: #111; transition: all 0.2s; } .nav a:hover { color: #fff; background: #1a1a1a; border-color: #333; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; } .stat-card { background: #111; padding: 28px; border-radius: 10px; border: 1px solid #222; } .stat-icon { font-size: 38px; margin-bottom: 16px; } .stat-value { font-size: 42px; font-weight: 600; color: #fff; margin: 12px 0; } .stat-label { color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; } .stat-desc { color: #888; font-size: 13px; margin-top: 12px; line-height: 1.5; } .chart-container { background: #111; padding: 24px; margin: 24px 0; border-radius: 10px; border: 1px solid #222; } h2 { margin-bottom: 20px; font-size: 16px; font-weight: 600; }</style></head><body><div class="header"><div class="header-content"><h1>Analyses Avancées</h1></div></div><div class="container"><div class="nav"><a href="/dashboard">← Retour</a></div><div class="stats-grid"><div class="stat-card"><div class="stat-icon">🦶</div><div class="stat-label">Cadence Moyenne</div><div class="stat-value">${avgCadence}</div><div class="stat-desc">Foulées/minute • Optimal : 170-180</div></div><div class="stat-card"><div class="stat-icon">📉</div><div class="stat-label">Variabilité d'Allure</div><div class="stat-value">${variability}%</div><div class="stat-desc">${variability < 10 ? 'Excellent ! Très constant' : variability < 15 ? 'Bon, assez régulier' : 'À améliorer'}</div></div><div class="stat-card"><div class="stat-icon">⚡</div><div class="stat-label">Allure Moyenne Globale</div><div class="stat-value">${avgPace.toFixed(2)}</div><div class="stat-desc">min/km sur ${paces.length} courses</div></div></div><div class="chart-container"><h2>Temps vs Distance</h2><canvas id="timeDistanceChart"></canvas></div></div><script>Chart.defaults.color = '#666'; Chart.defaults.borderColor = '#1a1a1a'; new Chart(document.getElementById('timeDistanceChart'), { type: 'scatter', data: { datasets: [{ data: ${JSON.stringify(timeDistanceData.map(d => ({ x: parseFloat(d.distance), y: d.time })))}, backgroundColor: '#3b82f6', borderColor: '#3b82f6', borderWidth: 0, pointRadius: 6, pointHoverRadius: 8 }] }, options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { type: 'linear', title: { display: true, text: 'Distance (km)', color: '#888', font: { size: 12 } }, grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } } }, y: { title: { display: true, text: 'Temps (minutes)', color: '#888', font: { size: 12 } }, grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } } } } } });</script></body></html>`);
+  } catch (error) {
+    console.error('Erreur:', error.response?.data || error.message);
+    res.send('Erreur');
+  }
+});
+
+// DETAIL D'UNE ACTIVITE (remplace la route existante)
 app.get('/activity/:id', async (req, res) => {
   const athleteId = Object.keys(userTokens)[0];
   if (!athleteId) return res.redirect('/');
@@ -403,12 +471,12 @@ app.get('/activity/:id', async (req, res) => {
 
     const activity = activityResponse.data;
     
-    // Récupérer les streams (données détaillées)
+    // Récupérer les streams (données détaillées) - AJOUTER CADENCE
     let streams = {};
     try {
       const streamsResponse = await axios.get(`https://www.strava.com/api/v3/activities/${activityId}/streams`, {
         headers: { 'Authorization': `Bearer ${user.accessToken}` },
-        params: { keys: 'distance,altitude,heartrate,time', key_by_type: true }
+        params: { keys: 'distance,altitude,heartrate,time,cadence', key_by_type: true }
       });
       streams = streamsResponse.data;
     } catch (e) {
@@ -424,12 +492,14 @@ app.get('/activity/:id', async (req, res) => {
     const pace = `${paceMinutes}:${String(paceSeconds).padStart(2, '0')}`;
     const date = new Date(activity.start_date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
+    // Cadence moyenne et max
+    const avgCadence = activity.average_cadence ? Math.round(activity.average_cadence * 2) : null;
+    const maxCadence = streams.cadence ? Math.round(Math.max(...streams.cadence.data) * 2) : null;
+    
     // Récupérer les splits officiels de Strava
     let paceByKm = [];
     if (activity.splits_metric && activity.splits_metric.length > 0) {
-      // Utiliser les splits officiels de Strava (plus précis)
       activity.splits_metric.forEach((split, idx) => {
-        // Inclure tous les splits, même partiels
         const paceSeconds = split.moving_time / (split.distance / 1000);
         const paceMinutes = Math.floor(paceSeconds / 60);
         const paceSecs = Math.round(paceSeconds % 60);
@@ -440,7 +510,6 @@ app.get('/activity/:id', async (req, res) => {
         });
       });
     } else if (streams.distance && streams.time) {
-      // Fallback sur les streams si pas de splits
       const distanceData = streams.distance.data;
       const timeData = streams.time.data;
       
@@ -467,14 +536,14 @@ app.get('/activity/:id', async (req, res) => {
     // Dénivelé
     const elevation = Math.round(activity.total_elevation_gain || 0);
     
-    res.send(`<html><head><title>Détails Activité</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: 'SF Pro Display', -apple-system, Arial; background: #000; color: #fff; } .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 50px 30px; border-bottom: 1px solid rgba(255,255,255,0.1); } .header-content { max-width: 1400px; margin: 0 auto; } h1 { font-size: 42px; font-weight: 800; background: linear-gradient(135deg, #ff3366 0%, #6366f1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; } .date-info { color: rgba(255,255,255,0.6); font-size: 16px; } .container { max-width: 1400px; margin: 0 auto; padding: 40px 20px; } .nav { margin: 30px 0; display: flex; gap: 15px; flex-wrap: wrap; } .nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; } .nav a:hover { color: #ff3366; border-color: rgba(255,51,102,0.5); background: rgba(255,51,102,0.1); } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin: 30px 0; } .stat-box { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 30px; border-radius: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.1); position: relative; overflow: hidden; } .stat-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #ff3366, #6366f1); } .stat-value { font-size: 36px; font-weight: 800; background: linear-gradient(135deg, #ff3366 0%, #6366f1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 10px 0; } .stat-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; } .chart-container { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 35px; margin: 30px 0; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); } .pace-table { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 35px; margin: 30px 0; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); } h2 { margin-bottom: 25px; font-size: 24px; font-weight: 700; color: rgba(255,255,255,0.9); } table { width: 100%; border-collapse: collapse; } th, td { padding: 16px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); } th { background: rgba(255,255,255,0.02); color: rgba(255,255,255,0.8); font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; } td { color: rgba(255,255,255,0.9); } .fast { color: #10b981; font-weight: bold; } .slow { color: #f59e0b; font-weight: bold; } canvas { max-height: 400px; }</style></head><body><div class="header"><div class="header-content"><h1>${activity.name}</h1><div class="date-info">${date}</div></div></div><div class="container"><div class="nav"><a href="/dashboard">← Dashboard</a></div><div class="stats-grid"><div class="stat-box"><div class="stat-value">${distance} km</div><div class="stat-label">Distance</div></div><div class="stat-box"><div class="stat-value">${duration}:${String(durationSeconds).padStart(2, '0')}</div><div class="stat-label">Durée</div></div><div class="stat-box"><div class="stat-value">${pace} /km</div><div class="stat-label">Allure moyenne</div></div><div class="stat-box"><div class="stat-value">${elevation} m</div><div class="stat-label">Dénivelé</div></div>${avgHR ? `<div class="stat-box"><div class="stat-value">${avgHR} bpm</div><div class="stat-label">FC moyenne</div></div>` : ''}${maxHR ? `<div class="stat-box"><div class="stat-value">${maxHR} bpm</div><div class="stat-label">FC max</div></div>` : ''}</div>${paceByKm.length > 0 ? `<div class="pace-table"><h2>Allure par kilomètre</h2><table><thead><tr><th>Kilomètre</th><th>Allure (min/km)</th></tr></thead><tbody>${paceByKm.map(p => {
+    res.send(`<html><head><title>Détails Activité</title><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.6; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 1200px; margin: 0 auto; } h1 { font-size: 32px; font-weight: 600; color: #fff; margin-bottom: 8px; } .date-info { color: #888; font-size: 14px; } .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; } .nav { margin: 20px 0; } .nav a { color: #888; text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 16px; border-radius: 6px; transition: all 0.2s; } .nav a:hover { color: #fff; background: #1a1a1a; } .summary-card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 24px; margin: 25px 0; } .stats-compact { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; } .stat-item { text-align: center; padding: 16px; background: #0a0a0a; border-radius: 8px; border: 1px solid #1a1a1a; } .stat-value { font-size: 28px; font-weight: 600; color: #fff; margin-bottom: 4px; } .stat-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; } .cadence-info { font-size: 10px; color: #888; margin-top: 4px; } .section { margin: 30px 0; } .section-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #222; } .chart-box { background: #111; border: 1px solid #222; border-radius: 12px; padding: 20px; margin: 16px 0; } canvas { max-height: 350px; } table { width: 100%; border-collapse: separate; border-spacing: 0; } th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #1a1a1a; } th { background: #0a0a0a; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; } td { color: #ccc; font-size: 14px; } tr:last-child td { border-bottom: none; } .fast { color: #4ade80; font-weight: 600; } .slow { color: #fb923c; font-weight: 600; }</style></head><body><div class="header"><div class="header-content"><h1>${activity.name}</h1><div class="date-info">${date}</div></div></div><div class="container"><div class="nav"><a href="/dashboard">← Retour</a></div><div class="summary-card"><div class="stats-compact"><div class="stat-item"><div class="stat-value">${distance}</div><div class="stat-label">Distance (km)</div></div><div class="stat-item"><div class="stat-value">${duration}:${String(durationSeconds).padStart(2, '0')}</div><div class="stat-label">Temps</div></div><div class="stat-item"><div class="stat-value">${pace}</div><div class="stat-label">Allure (/km)</div></div><div class="stat-item"><div class="stat-value">${elevation}</div><div class="stat-label">Dénivelé (m)</div></div>${avgCadence ? `<div class="stat-item"><div class="stat-value">${avgCadence}</div><div class="stat-label">Cadence Moy</div><div class="cadence-info">spm (pas/min)</div></div>` : ''}${maxCadence ? `<div class="stat-item"><div class="stat-value">${maxCadence}</div><div class="stat-label">Cadence Max</div><div class="cadence-info">spm</div></div>` : ''}${avgHR ? `<div class="stat-item"><div class="stat-value">${avgHR}</div><div class="stat-label">FC Moy (bpm)</div></div>` : ''}${maxHR ? `<div class="stat-item"><div class="stat-value">${maxHR}</div><div class="stat-label">FC Max (bpm)</div></div>` : ''}</div></div>${paceByKm.length > 0 ? `<div class="section"><div class="section-title">Allures par kilomètre</div><div class="chart-box"><table><thead><tr><th>KM</th><th>Allure</th></tr></thead><tbody>${paceByKm.map(p => {
       const splitPace = p.pace.split(':');
       const paceInSeconds = parseInt(splitPace[0]) * 60 + parseInt(splitPace[1]);
       const avgPaceInSeconds = paceMinutes * 60 + paceSeconds;
       const className = paceInSeconds < avgPaceInSeconds - 5 ? 'fast' : (paceInSeconds > avgPaceInSeconds + 5 ? 'slow' : '');
-      const kmLabel = p.distance == '1.00' ? `Km ${p.km}` : `Km ${p.km} (${p.distance} km)`;
-      return `<tr><td>${kmLabel}</td><td class="${className}">${p.pace} /km</td></tr>`;
-    }).join('')}</tbody></table></div>` : '<div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 35px; margin: 30px 0; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1);"><p style="color: rgba(255,255,255,0.6);">Les détails par kilomètre ne sont pas disponibles pour cette activité.</p></div>'}${streams.altitude && streams.distance ? `<div class="chart-container"><h2>Profil d'altitude</h2><canvas id="elevationChart"></canvas></div><script>Chart.defaults.color = 'rgba(255,255,255,0.7)'; Chart.defaults.borderColor = 'rgba(255,255,255,0.1)'; new Chart(document.getElementById('elevationChart'), { type: 'line', data: { labels: ${JSON.stringify(streams.distance.data.map(d => (d/1000).toFixed(1)))}, datasets: [{ label: 'Altitude (m)', data: ${JSON.stringify(streams.altitude.data)}, backgroundColor: function(context) { const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(139, 92, 246, 0.3)'); gradient.addColorStop(1, 'rgba(99, 102, 241, 0.1)'); return gradient; }, borderColor: 'rgba(139, 92, 246, 1)', borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: 'rgba(139, 92, 246, 1)', pointBorderColor: '#fff', pointBorderWidth: 2 }] }, options: { responsive: true, plugins: { legend: { labels: { font: { size: 14 } } } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Distance (km)', font: { size: 14 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Altitude (m)', font: { size: 14 } } } } } });</script>` : ''}${streams.heartrate ? `<div class="chart-container"><h2>Fréquence cardiaque</h2><canvas id="hrChart"></canvas></div><script>new Chart(document.getElementById('hrChart'), { type: 'line', data: { labels: ${JSON.stringify(streams.time.data.map(t => Math.floor(t/60)))}, datasets: [{ label: 'BPM', data: ${JSON.stringify(streams.heartrate.data)}, backgroundColor: function(context) { const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(239, 68, 68, 0.3)'); gradient.addColorStop(1, 'rgba(220, 38, 38, 0.1)'); return gradient; }, borderColor: 'rgba(239, 68, 68, 1)', borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: 'rgba(239, 68, 68, 1)', pointBorderColor: '#fff', pointBorderWidth: 2 }] }, options: { responsive: true, plugins: { legend: { labels: { font: { size: 14 } } } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Temps (min)', font: { size: 14 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'BPM', font: { size: 14 } } } } } });</script>` : ''}</div></body></html>`);
+      const kmLabel = p.distance == '1.00' ? `${p.km}` : `${p.km} (${p.distance}km)`;
+      return `<tr><td>${kmLabel}</td><td class="${className}">${p.pace}</td></tr>`;
+    }).join('')}</tbody></table></div></div>` : ''}${streams.cadence ? `<div class="section"><div class="section-title">Cadence</div><div class="chart-box"><canvas id="cadenceChart"></canvas></div></div><script>Chart.defaults.color = '#666'; Chart.defaults.borderColor = '#1a1a1a'; new Chart(document.getElementById('cadenceChart'), { type: 'line', data: { labels: ${JSON.stringify(streams.time.data.map(t => Math.floor(t/60)))}, datasets: [{ data: ${JSON.stringify(streams.cadence.data.map(c => c * 2))}, backgroundColor: 'rgba(139, 92, 246, 0.1)', borderColor: '#8b5cf6', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#8b5cf6' }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } }, title: { display: true, text: 'Temps (min)', color: '#888', font: { size: 12 } } }, y: { grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } }, title: { display: true, text: 'Cadence (spm)', color: '#888', font: { size: 12 } } } } } });</script>` : ''}${streams.altitude && streams.distance ? `<div class="section"><div class="section-title">Profil d'altitude</div><div class="chart-box"><canvas id="elevationChart"></canvas></div></div><script>Chart.defaults.color = '#666'; Chart.defaults.borderColor = '#1a1a1a'; new Chart(document.getElementById('elevationChart'), { type: 'line', data: { labels: ${JSON.stringify(streams.distance.data.map(d => (d/1000).toFixed(1)))}, datasets: [{ data: ${JSON.stringify(streams.altitude.data)}, backgroundColor: 'rgba(59, 130, 246, 0.1)', borderColor: '#3b82f6', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#3b82f6' }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } }, title: { display: true, text: 'Distance (km)', color: '#888', font: { size: 12 } } }, y: { grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } }, title: { display: true, text: 'Altitude (m)', color: '#888', font: { size: 12 } } } } } });</script>` : ''}${streams.heartrate ? `<div class="section"><div class="section-title">Fréquence cardiaque</div><div class="chart-box"><canvas id="hrChart"></canvas></div></div><script>new Chart(document.getElementById('hrChart'), { type: 'line', data: { labels: ${JSON.stringify(streams.time.data.map(t => Math.floor(t/60)))}, datasets: [{ data: ${JSON.stringify(streams.heartrate.data)}, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: '#ef4444', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#ef4444' }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } }, title: { display: true, text: 'Temps (min)', color: '#888', font: { size: 12 } } }, y: { grid: { color: '#1a1a1a', drawBorder: false }, ticks: { color: '#666', font: { size: 11 } }, title: { display: true, text: 'BPM', color: '#888', font: { size: 12 } } } } } });</script>` : ''}</div></body></html>`);
   } catch (error) {
     console.error('Erreur:', error.response?.data || error.message);
     res.send('Erreur lors de la récupération des détails');
@@ -482,7 +551,6 @@ app.get('/activity/:id', async (req, res) => {
 });
 
 // PROGRAMME RUN IN LYON
-let trainingProgress = {};
 
 app.get('/run-in-lyon', (req, res) => {
   const athleteId = Object.keys(userTokens)[0];
