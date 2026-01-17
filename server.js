@@ -147,7 +147,7 @@ app.get('/dashboard', async (req, res) => {
     let page = 1;
     let hasMore = true;
     
-    while (hasMore && page <= 10) { // Max 10 pages = 2000 activités
+    while (hasMore && page <= 10) {
       const activitiesResponse = await axios.get('https://www.strava.com/api/v3/athlete/activities', {
         headers: { 'Authorization': `Bearer ${user.accessToken}` },
         params: { per_page: 200, page: page }
@@ -163,12 +163,108 @@ app.get('/dashboard', async (req, res) => {
     }
 
     const activities = allActivities;
-    
-    // Calculer les badges
     const runs = activities.filter(a => a.type === 'Run');
     const badges = calculateBadges(runs, athleteId);
     
-    let html = `<html><head><title>Dashboard</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } .header-content { max-width: 900px; margin: 0 auto; } .welcome { font-size: 50px; font-weight: 600; color: #fff; margin-bottom: 6px; } .subtitle { color: #666; font-size: 24px; } .container { margin: 0 auto; padding: 30px 20px; } .nav { display: flex; gap: 50px; margin: 15px 0; flex-wrap: wrap; } .nav-btn { background: #111; color: #888; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-size: 40px; font-weight: 500; border: 1px solid #222; transition: all 0.2s; } .nav-btn:hover { background: #1a1a1a; color: #fff; border-color: #333; } .nav-btn.special { background: #3b82f6; color: #fff; border-color: #3b82f6; } .badges-section { margin: 30px 0; } .section-title { font-size: 30px; font-weight: 600; color: #fff; margin-bottom: 16px; } .badges-grid { display: flex; gap: 12px; flex-wrap: wrap; } .badge-pill { background: #111; border: 1px solid #f7ce11; padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; font-size: 30px; transition: all 0.2s; } .badge-pill:hover { background: #1a1a1a; border-color: #333; } .badge-icon { font-size: 30px; } .badge-text { color: #ccc; font-weight: 500; } h2 { margin: 40px 0 20px 0; font-size: 30px; font-weight: 600; color: #fff; } .activity { background: #111; padding: 60px; margin: 25px 0; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #222; } .activity:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } .activity h3 { font-size: 30px; font-weight: 600; margin-bottom: 10px; color: #fff; } .stats { color: #888; display: flex; gap: 20px; flex-wrap: wrap; font-size: 30px; } .stats > div { display: flex; align-items: center; gap: 6px; }</style></head><body><div class="header"><div class="header-content"><div class="welcome">Salut ${user.athlete.firstname}</div><div class="subtitle">Tableau de bord</div></div></div><div class="container"><div class="nav"><a href="/analyses" class="nav-btn">Analyses</a><a href="/progression" class="nav-btn">Progression</a><a href="/records" class="nav-btn">Records</a><a href="/prediction" class="nav-btn">Prédictions</a><a href="/programme" class="nav-btn">Programme</a><a href="/run-in-lyon" class="nav-btn special">Run In Lyon 2026</a></div>${badges.length > 0 ? `<div class="badges-section"><div class="section-title">Badges débloqués</div><div class="badges-grid">${badges.map(badge => `<div class="badge-pill"><span class="badge-icon">${badge.icon}</span><span class="badge-text">${badge.name}</span></div>`).join('')}</div></div>` : ''}<h2>Activités récentes</h2>`;
+    let html = `<html><head><title>Dashboard</title><style>
+    * { margin: 0; padding: 0; box-sizing: border-box; } 
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; } 
+    .header { background: #111; padding: 30px; border-bottom: 1px solid #222; } 
+    .header-content { max-width: 900px; margin: 0 auto; } 
+    .welcome { font-size: 50px; font-weight: 600; color: #fff; margin-bottom: 6px; } 
+    .subtitle { color: #666; font-size: 24px; } 
+    .container { margin: 0 auto; padding: 30px 20px; } 
+    .nav { display: flex; gap: 50px; margin: 15px 0; flex-wrap: wrap; } 
+    .nav-btn { background: #111; color: #888; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-size: 40px; font-weight: 500; border: 1px solid #222; transition: all 0.2s; } 
+    .nav-btn:hover { background: #1a1a1a; color: #fff; border-color: #333; } 
+    .nav-btn.special { background: #3b82f6; color: #fff; border-color: #3b82f6; } 
+    .badges-section { margin: 30px 0; } 
+    .section-title { font-size: 30px; font-weight: 600; color: #fff; margin-bottom: 16px; } 
+    .badges-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; } 
+    .badge-card { 
+      background: #111; 
+      border: 2px solid #f7ce11; 
+      padding: 20px; 
+      border-radius: 12px; 
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: all 0.3s; 
+      cursor: pointer;
+    } 
+    .badge-card:hover { 
+      background: #1a1a1a; 
+      border-color: #ffd700; 
+      transform: translateY(-4px);
+      box-shadow: 0 8px 20px rgba(247, 206, 17, 0.3);
+    } 
+    .badge-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge-icon { font-size: 40px; } 
+    .badge-name { 
+      color: #fff; 
+      font-weight: 600; 
+      font-size: 20px;
+      flex: 1;
+      align-items: center;
+    }
+    .badge-desc {
+      color: #888;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-top: 4px;
+    }
+    .badge-stats {
+      color: #f7ce11;
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 8px;
+      padding-top: 12px;
+      border-top: 1px solid #222;
+    }
+    h2 { margin: 40px 0 20px 0; font-size: 30px; font-weight: 600; color: #fff; } 
+    .activity { background: #111; padding: 60px; margin: 25px 0; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #222; } 
+    .activity:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } 
+    .activity h3 { font-size: 30px; font-weight: 600; margin-bottom: 10px; color: #fff; } 
+    .stats { color: #888; display: flex; gap: 20px; flex-wrap: wrap; font-size: 30px; } 
+    .stats > div { display: flex; align-items: center; gap: 6px; }
+    </style></head><body>
+    <div class="header">
+      <div class="header-content">
+        <div class="welcome">Salut ${user.athlete.firstname}</div>
+        <div class="subtitle">Tableau de bord</div>
+      </div>
+    </div>
+    <div class="container">
+      <div class="nav">
+        <a href="/analyses" class="nav-btn">Analyses</a>
+        <a href="/progression" class="nav-btn">Progression</a>
+        <a href="/records" class="nav-btn">Records</a>
+        <a href="/prediction" class="nav-btn">Prédictions</a>
+        <a href="/programme" class="nav-btn">Programme</a>
+        <a href="/run-in-lyon" class="nav-btn special">Run In Lyon 2026</a>
+      </div>
+      ${badges.length > 0 ? `
+        <div class="badges-section">
+          <div class="section-title">🏆 Badges débloqués</div>
+          <div class="badges-grid">
+            ${badges.map(badge => `
+              <div class="badge-card">
+                <div class="badge-header">
+                  <span class="badge-icon">${badge.icon}</span>
+                </div>
+                <div class="badge-name">${badge.name}</div>
+                <div class="badge-desc">${badge.desc}</div>
+                ${badge.stats ? `<div class="badge-stats">${badge.stats}</div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      <h2>Activités récentes</h2>`;
 
     activities.forEach(a => {
       const dist = (a.distance / 1000).toFixed(2);
@@ -178,7 +274,16 @@ app.get('/dashboard', async (req, res) => {
       const paceMin = Math.floor(paceSeconds / 60);
       const paceSec = Math.round(paceSeconds % 60);
       const pace = `${paceMin}:${String(paceSec).padStart(2, '0')}`;
-      html += `<div class="activity" style="cursor: pointer;" onclick="window.location.href='/activity/${a.id}'"><h3>${a.name}</h3><div class="stats"><div>📅 ${date}</div><div>📏 ${dist} km</div><div>⏱️ ${dur} min</div><div>⚡ ${pace} /km</div><div>👉 Voir détails</div></div></div>`;
+      html += `<div class="activity" onclick="window.location.href='/activity/${a.id}'">
+        <h3>${a.name}</h3>
+        <div class="stats">
+          <div>📅 ${date}</div>
+          <div>📏 ${dist} km</div>
+          <div>⏱️ ${dur} min</div>
+          <div>⚡ ${pace} /km</div>
+          <div>👉 Voir détails</div>
+        </div>
+      </div>`;
     });
 
     html += `</div></body></html>`;
@@ -390,14 +495,52 @@ function calculateBadges(runs, athleteId) {
   const totalRuns = runs.length;
   
   // Badges distance
-  if (totalDistance >= 1000) badges.push({ icon: '🌍', name: 'Globe Trotter', desc: '1000 km parcourus', color: '#ffd700' });
-  else if (totalDistance >= 500) badges.push({ icon: '🚀', name: 'Marathonien', desc: '500 km parcourus', color: '#ff6b9d' });
-  else if (totalDistance >= 100) badges.push({ icon: '⭐', name: 'Centurion', desc: '100 km parcourus', color: '#6366f1' });
+  if (totalDistance >= 1000) {
+    badges.push({ 
+      icon: '🌍', 
+      name: 'Globe Trotter', 
+      desc: 'Tu as parcouru plus de 1000 km ! Équivalent de Paris à Barcelone.',
+      stats: `${totalDistance.toFixed(0)} km parcourus`
+    });
+  } else if (totalDistance >= 500) {
+    badges.push({ 
+      icon: '<img src="/500km.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Marathonien', 
+      desc: 'Déjà 500 km dans les jambes ! Environ 12 marathons enchaînés.',
+      stats: `${totalDistance.toFixed(0)} km parcourus`
+    });
+  } else if (totalDistance >= 100) {
+    badges.push({ 
+      icon: '<img src="/100km.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Centurion', 
+      desc: '100 premiers kilomètres franchis ! Le voyage commence.',
+      stats: `${totalDistance.toFixed(0)} km parcourus`
+    });
+  }
   
   // Badges nombre de courses
-  if (totalRuns >= 100) badges.push({ icon: '💯', name: 'Centenaire', desc: '100 courses', color: '#ffd700' });
-  else if (totalRuns >= 50) badges.push({ icon: '🔥', name: 'Assidu', desc: '50 courses', color: '#ff6b9d' });
-  else if (totalRuns >= 10) badges.push({ icon: '👟', name: 'Débutant Pro', desc: '10 courses', color: '#6366f1' });
+  if (totalRuns >= 100) {
+    badges.push({ 
+      icon: '<img src="/100courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Centenaire', 
+      desc: '100 sorties au compteur ! La course fait partie de ta vie.',
+      stats: `${totalRuns} courses effectuées`
+    });
+  } else if (totalRuns >= 50) {
+    badges.push({ 
+      icon: '<img src="/50courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Assidu', 
+      desc: '50 courses, tu prends goût à la routine running !',
+      stats: `${totalRuns} courses effectuées`
+    });
+  } else if (totalRuns >= 10) {
+    badges.push({ 
+      icon: '<img src="/10courses.png" alt="Mon logo" style="width:200px; height:200px;">',
+      name: 'Débutant Pro', 
+      desc: '10 sorties complétées, tu es lancé sur de bons rails.',
+      stats: `${totalRuns} courses effectuées`
+    });
+  }
   
   // Badge meilleure allure
   const bestPaceRun = runs.reduce((best, run) => {
@@ -407,20 +550,64 @@ function calculateBadges(runs, athleteId) {
   }, runs[0] || {});
   const bestPace = bestPaceRun.distance > 0 ? (bestPaceRun.moving_time / 60) / (bestPaceRun.distance / 1000) : 0;
   
-  if (bestPace > 0 && bestPace < 4.5) badges.push({ icon: '⚡', name: 'Vitesse Éclair', desc: 'Allure < 4:30/km', color: '#ffd700' });
-  else if (bestPace > 0 && bestPace < 5.5) badges.push({ icon: '💨', name: 'Rapide', desc: 'Allure < 5:30/km', color: '#6366f1' });
+  if (bestPace > 0 && bestPace < 4.5) {
+    const paceMin = Math.floor(bestPace);
+    const paceSec = Math.round((bestPace % 1) * 60);
+    badges.push({ 
+      icon: '<img src="/430.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Vitesse Éclair', 
+      desc: 'Impressionnant ! Une allure sous 4:30/km, niveau élite amateur.',
+      stats: `Record : ${paceMin}:${String(paceSec).padStart(2, '0')}/km`
+    });
+  } else if (bestPace > 0 && bestPace < 5.5) {
+    const paceMin = Math.floor(bestPace);
+    const paceSec = Math.round((bestPace % 1) * 60);
+    badges.push({ 
+      icon: '<img src="/530.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Rapide', 
+      desc: 'Allure sous 5:30/km, tu as de belles capacités !',
+      stats: `Record : ${paceMin}:${String(paceSec).padStart(2, '0')}/km`
+    });
+  }
   
   // Badge longue distance
   const longestRun = runs.reduce((longest, run) => run.distance > (longest.distance || 0) ? run : longest, runs[0] || {});
-  if (longestRun.distance >= 42195) badges.push({ icon: '🏅', name: 'Marathonien', desc: 'Marathon complet', color: '#ffd700' });
-  else if (longestRun.distance >= 21000) badges.push({ icon: '🎖️', name: 'Semi-Marathonien', desc: 'Semi-marathon', color: '#ff6b9d' });
+  if (longestRun.distance >= 42195) {
+    badges.push({ 
+      icon: '🏅', 
+      name: 'Marathonien', 
+      desc: 'Tu as bouclé 42.195 km ! Les 26 miles mythiques.',
+      stats: `Plus longue sortie : ${(longestRun.distance / 1000).toFixed(2)} km`
+    });
+  } else if (longestRun.distance >= 21000) {
+    badges.push({ 
+      icon: '<img src="/semi.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Semi-Marathonien', 
+      desc: 'Semi-marathon accompli ! 21.1 km de dépassement de soi.',
+      stats: `Plus longue sortie : ${(longestRun.distance / 1000).toFixed(2)} km`
+    });
+  }
   
   // Badge régularité (courses cette semaine)
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
   const runsThisWeek = runs.filter(r => new Date(r.start_date) > oneWeekAgo).length;
-  if (runsThisWeek >= 5) badges.push({ icon: '📅', name: 'Ultra Régulier', desc: '5+ courses/semaine', color: '#10b981' });
-  else if (runsThisWeek >= 3) badges.push({ icon: '✅', name: 'Régulier', desc: '3+ courses/semaine', color: '#6366f1' });
+  
+  if (runsThisWeek >= 4) {
+    badges.push({ 
+      icon: '<img src="/4courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Ultra Régulier', 
+      desc: '4+ sorties cette semaine ! Discipline de fer, bravo.',
+      stats: `${runsThisWeek} courses cette semaine`
+    });
+  } else if (runsThisWeek >= 3) {
+    badges.push({ 
+      icon: '<img src="/3courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
+      name: 'Régulier', 
+      desc: '3+ sorties hebdo, tu maintiens un bon rythme !',
+      stats: `${runsThisWeek} courses cette semaine`
+    });
+  }
   
   return badges;
 }
