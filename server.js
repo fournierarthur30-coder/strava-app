@@ -164,7 +164,7 @@ app.get('/dashboard', async (req, res) => {
 
     const activities = allActivities;
     const runs = activities.filter(a => a.type === 'Run');
-    const badges = calculateBadges(runs, athleteId);
+    const { unlocked, locked } = calculateBadgesWithLocked(runs, athleteId);
     
     let html = `<html><head><title>Dashboard</title><style>
     * { margin: 0; padding: 0; box-sizing: border-box; } 
@@ -179,11 +179,25 @@ app.get('/dashboard', async (req, res) => {
     .nav-btn:hover { background: #1a1a1a; color: #fff; border-color: #333; } 
     .nav-btn.special { background: #3b82f6; color: #fff; border-color: #3b82f6; } 
     .badges-section { margin: 30px 0; } 
-    .section-title { font-size: 30px; font-weight: 600; color: #fff; margin-bottom: 16px; } 
+    .section-title { font-size: 30px; font-weight: 600; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; } 
+    .view-all-btn {
+      background: #3b82f6;
+      color: white;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 16px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .view-all-btn:hover {
+      background: #2563eb;
+      transform: translateY(-2px);
+    }
     .badges-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; } 
     .badge-card { 
       background: #111; 
-      border: 2px solid #f7ce11; 
       padding: 20px; 
       border-radius: 12px; 
       display: flex;
@@ -191,13 +205,33 @@ app.get('/dashboard', async (req, res) => {
       gap: 12px;
       transition: all 0.3s; 
       cursor: pointer;
-    } 
+      position: relative;
+      overflow: hidden;
+    }
+    .badge-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+    .badge-card.level-1::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+    .badge-card.level-2::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+    .badge-card.level-3::before { background: linear-gradient(90deg, #fbbf24, #fcd34d); }
+    
+    .badge-card.level-1 { border: 2px solid #3b82f6; }
+    .badge-card.level-2 { border: 2px solid #ef4444; }
+    .badge-card.level-3 { border: 2px solid #fbbf24; }
+    
     .badge-card:hover { 
       background: #1a1a1a; 
-      border-color: #ffd700; 
       transform: translateY(-4px);
-      box-shadow: 0 8px 20px rgba(247, 206, 17, 0.3);
-    } 
+    }
+    .badge-card.level-1:hover { box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4); }
+    .badge-card.level-2:hover { box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4); }
+    .badge-card.level-3:hover { box-shadow: 0 8px 20px rgba(251, 191, 36, 0.4); }
+    
     .badge-header {
       display: flex;
       align-items: center;
@@ -209,8 +243,19 @@ app.get('/dashboard', async (req, res) => {
       font-weight: 600; 
       font-size: 20px;
       flex: 1;
-      align-items: center;
     }
+    .badge-level {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-level.level-1 { background: #3b82f6; color: white; }
+    .badge-level.level-2 { background: #ef4444; color: white; }
+    .badge-level.level-3 { background: #fbbf24; color: #000; }
+    
     .badge-desc {
       color: #888;
       font-size: 14px;
@@ -218,13 +263,84 @@ app.get('/dashboard', async (req, res) => {
       margin-top: 4px;
     }
     .badge-stats {
-      color: #f7ce11;
+      color: #3b82f6;
       font-size: 12px;
       font-weight: 500;
       margin-top: 8px;
       padding-top: 12px;
       border-top: 1px solid #222;
     }
+    .badge-card.level-2 .badge-stats { color: #ef4444; }
+    .badge-card.level-3 .badge-stats { color: #fbbf24; }
+    
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.9);
+      overflow-y: auto;
+    }
+    .modal.active { display: block; }
+    .modal-content {
+      background-color: #0a0a0a;
+      margin: 5% auto;
+      padding: 40px;
+      max-width: 1200px;
+      border-radius: 16px;
+      border: 1px solid #222;
+      position: relative;
+    }
+    .close {
+      color: #888;
+      float: right;
+      font-size: 40px;
+      font-weight: bold;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .close:hover { color: #fff; }
+    .modal-title {
+      font-size: 36px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 30px;
+      clear: both;
+    }
+    .modal-section {
+      margin: 40px 0;
+    }
+    .modal-section h3 {
+      font-size: 24px;
+      color: #888;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 600;
+    }
+    .badge-card.locked {
+      opacity: 0.4;
+      filter: grayscale(1);
+      border: 2px solid #333;
+    }
+    .badge-card.locked::before { background: #333; }
+    .badge-card.locked:hover {
+      opacity: 0.6;
+      transform: none;
+      box-shadow: none;
+    }
+    .badge-card.locked .badge-stats {
+      color: #666;
+    }
+    .lock-icon {
+      font-size: 24px;
+      opacity: 0.6;
+    }
+    
     h2 { margin: 40px 0 20px 0; font-size: 30px; font-weight: 600; color: #fff; } 
     .activity { background: #111; padding: 60px; margin: 25px 0; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #222; } 
     .activity:hover { background: #1a1a1a; border-color: #333; transform: translateY(-2px); } 
@@ -247,14 +363,18 @@ app.get('/dashboard', async (req, res) => {
         <a href="/programme" class="nav-btn">Programme</a>
         <a href="/run-in-lyon" class="nav-btn special">Run In Lyon 2026</a>
       </div>
-      ${badges.length > 0 ? `
+      ${unlocked.length > 0 ? `
         <div class="badges-section">
-          <div class="section-title">🏆 Badges débloqués</div>
+          <div class="section-title">
+            🏆 Badges débloqués (${unlocked.length})
+            <button class="view-all-btn" onclick="openBadgesModal()">Voir tous les badges</button>
+          </div>
           <div class="badges-grid">
-            ${badges.map(badge => `
-              <div class="badge-card">
+            ${unlocked.map(badge => `
+              <div class="badge-card level-${badge.level}">
                 <div class="badge-header">
                   <span class="badge-icon">${badge.icon}</span>
+                  <span class="badge-level level-${badge.level}">Niveau ${badge.level}</span>
                 </div>
                 <div class="badge-name">${badge.name}</div>
                 <div class="badge-desc">${badge.desc}</div>
@@ -285,6 +405,65 @@ app.get('/dashboard', async (req, res) => {
         </div>
       </div>`;
     });
+
+    // Modal avec tous les badges
+    html += `
+    <div id="badgesModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeBadgesModal()">&times;</span>
+        <h2 class="modal-title">🏆 Collection de badges</h2>
+        
+        <div class="modal-section">
+          <h3>✅ Débloqués (${unlocked.length})</h3>
+          <div class="badges-grid">
+            ${unlocked.map(badge => `
+              <div class="badge-card level-${badge.level}">
+                <div class="badge-header">
+                  <span class="badge-icon">${badge.icon}</span>
+                  <span class="badge-level level-${badge.level}">Niveau ${badge.level}</span>
+                </div>
+                <div class="badge-desc">${badge.desc}</div>
+                <div class="badge-name">${badge.name}</div>
+                ${badge.stats ? `<div class="badge-stats">${badge.stats}</div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        <div class="modal-section">
+          <h3>🔒 À débloquer (${locked.length})</h3>
+          <div class="badges-grid">
+            ${locked.map(badge => `
+              <div class="badge-card locked level-${badge.level}">
+                <div class="badge-header">
+                  <span class="badge-icon">${badge.icon}</span>
+                  <span class="lock-icon">🔒</span>
+                </div>
+                <div class="badge-desc">${badge.desc}</div>
+                <div class="badge-name">${badge.name}</div>
+                ${badge.requirement ? `<div class="badge-stats">${badge.requirement}</div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      function openBadgesModal() {
+        document.getElementById('badgesModal').classList.add('active');
+      }
+      function closeBadgesModal() {
+        document.getElementById('badgesModal').classList.remove('active');
+      }
+      window.onclick = function(event) {
+        const modal = document.getElementById('badgesModal');
+        if (event.target == modal) {
+          closeBadgesModal();
+        }
+      }
+    </script>
+    `;
 
     html += `</div></body></html>`;
     res.send(html);
@@ -489,127 +668,214 @@ app.get('/programme', async (req, res) => {
 });
 
 // BADGES - Calcul des achievements
-function calculateBadges(runs, athleteId) {
-  const badges = [];
+ function calculateBadgesWithLocked(runs, athleteId) {
+  const unlocked = [];
+  const locked = [];
+  
   const totalDistance = runs.reduce((sum, r) => sum + r.distance / 1000, 0);
   const totalRuns = runs.length;
   
-  // Badges distance
-  if (totalDistance >= 1000) {
-    badges.push({ 
-      icon: '🌍', 
-      name: 'Globe Trotter', 
-      desc: 'Tu as parcouru plus de 1000 km ! Équivalent de Paris à Barcelone.',
-      stats: `${totalDistance.toFixed(0)} km parcourus`
+  // BADGES DISTANCE
+  const distanceBadges = [
+    { threshold: 100, level: 1, icon: '<img src="/100km.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Centurion', desc: '100 premiers kilomètres franchis ! Le voyage commence.', stats: `${totalDistance.toFixed(0)} km parcourus` },
+    { threshold: 500, level: 2, icon: '<img src="/500km.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Marathonien', desc: 'Déjà 500 km dans les jambes ! Environ 12 marathons enchaînés.', stats: `${totalDistance.toFixed(0)} km parcourus` },
+    { threshold: 1000, level: 3, icon: '🌍', name: 'Globe Trotter', desc: 'Tu as parcouru plus de 1000 km ! Équivalent de Paris à Barcelone.', stats: `${totalDistance.toFixed(0)} km parcourus` }
+  ];
+  
+  let distanceUnlocked = false;
+  for (let i = distanceBadges.length - 1; i >= 0; i--) {
+    if (totalDistance >= distanceBadges[i].threshold) {
+      unlocked.push(distanceBadges[i]);
+      distanceUnlocked = true;
+      break;
+    }
+  }
+  if (!distanceUnlocked) {
+    distanceBadges.forEach(badge => {
+      if (totalDistance < badge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${(badge.threshold - totalDistance).toFixed(0)} km restants`
+        });
+      }
     });
-  } else if (totalDistance >= 500) {
-    badges.push({ 
-      icon: '<img src="/500km.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Marathonien', 
-      desc: 'Déjà 500 km dans les jambes ! Environ 12 marathons enchaînés.',
-      stats: `${totalDistance.toFixed(0)} km parcourus`
-    });
-  } else if (totalDistance >= 100) {
-    badges.push({ 
-      icon: '<img src="/100km.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Centurion', 
-      desc: '100 premiers kilomètres franchis ! Le voyage commence.',
-      stats: `${totalDistance.toFixed(0)} km parcourus`
+  } else {
+    const currentBadge = distanceBadges.find(b => totalDistance >= b.threshold);
+    distanceBadges.forEach(badge => {
+      if (badge.threshold > currentBadge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${(badge.threshold - totalDistance).toFixed(0)} km restants`
+        });
+      }
     });
   }
   
-  // Badges nombre de courses
-  if (totalRuns >= 100) {
-    badges.push({ 
-      icon: '<img src="/100courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Centenaire', 
-      desc: '100 sorties au compteur ! La course fait partie de ta vie.',
-      stats: `${totalRuns} courses effectuées`
+  // BADGES NOMBRE DE COURSES
+  const runsBadges = [
+    { threshold: 10, level: 1, icon: '<img src="/10courses.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Débutant Pro', desc: '10 sorties complétées, tu es lancé sur de bons rails.', stats: `${totalRuns} courses effectuées` },
+    { threshold: 50, level: 2, icon: '<img src="/50courses.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Assidu', desc: '50 courses, tu prends goût à la routine running !', stats: `${totalRuns} courses effectuées` },
+    { threshold: 100, level: 3, icon: '<img src="/100courses.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Centenaire', desc: '100 sorties au compteur ! La course fait partie de ta vie.', stats: `${totalRuns} courses effectuées` }
+  ];
+  
+  let runsUnlocked = false;
+  for (let i = runsBadges.length - 1; i >= 0; i--) {
+    if (totalRuns >= runsBadges[i].threshold) {
+      unlocked.push(runsBadges[i]);
+      runsUnlocked = true;
+      break;
+    }
+  }
+  if (!runsUnlocked) {
+    runsBadges.forEach(badge => {
+      if (totalRuns < badge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${badge.threshold - totalRuns} courses restantes`
+        });
+      }
     });
-  } else if (totalRuns >= 50) {
-    badges.push({ 
-      icon: '<img src="/50courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Assidu', 
-      desc: '50 courses, tu prends goût à la routine running !',
-      stats: `${totalRuns} courses effectuées`
-    });
-  } else if (totalRuns >= 10) {
-    badges.push({ 
-      icon: '<img src="/10courses.png" alt="Mon logo" style="width:200px; height:200px;">',
-      name: 'Débutant Pro', 
-      desc: '10 sorties complétées, tu es lancé sur de bons rails.',
-      stats: `${totalRuns} courses effectuées`
+  } else {
+    const currentBadge = runsBadges.find(b => totalRuns >= b.threshold);
+    runsBadges.forEach(badge => {
+      if (badge.threshold > currentBadge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${badge.threshold - totalRuns} courses restantes`
+        });
+      }
     });
   }
   
-  // Badge meilleure allure
+  // BADGES ALLURE
   const bestPaceRun = runs.reduce((best, run) => {
     const pace = run.distance > 0 ? (run.moving_time / 60) / (run.distance / 1000) : Infinity;
     const bestPace = best.distance > 0 ? (best.moving_time / 60) / (best.distance / 1000) : Infinity;
     return pace < bestPace ? run : best;
   }, runs[0] || {});
-  const bestPace = bestPaceRun.distance > 0 ? (bestPaceRun.moving_time / 60) / (bestPaceRun.distance / 1000) : 0;
+  const bestPace = bestPaceRun.distance > 0 ? (bestPaceRun.moving_time / 60) / (bestPaceRun.distance / 1000) : 999;
   
-  if (bestPace > 0 && bestPace < 4.5) {
-    const paceMin = Math.floor(bestPace);
-    const paceSec = Math.round((bestPace % 1) * 60);
-    badges.push({ 
-      icon: '<img src="/430.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Vitesse Éclair', 
-      desc: 'Impressionnant ! Une allure sous 4:30/km, niveau élite amateur.',
-      stats: `Record : ${paceMin}:${String(paceSec).padStart(2, '0')}/km`
+  const paceBadges = [
+    { threshold: 5.5, level: 1, icon: '<img src="/530.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Rapide', desc: 'Allure sous 5:30/km, tu as de belles capacités !', getPaceStr: (p) => { const m = Math.floor(p); const s = Math.round((p % 1) * 60); return `${m}:${String(s).padStart(2, '0')}`; } },
+    { threshold: 4.5, level: 2, icon: '<img src="/430.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Vitesse Éclair', desc: 'Impressionnant ! Une allure sous 4:30/km, niveau élite amateur.', getPaceStr: (p) => { const m = Math.floor(p); const s = Math.round((p % 1) * 60); return `${m}:${String(s).padStart(2, '0')}`; } }
+  ];
+  
+  let paceUnlocked = false;
+  for (let i = paceBadges.length - 1; i >= 0; i--) {
+    if (bestPace > 0 && bestPace < paceBadges[i].threshold) {
+      unlocked.push({
+        ...paceBadges[i],
+        stats: `Record : ${paceBadges[i].getPaceStr(bestPace)}/km`
+      });
+      paceUnlocked = true;
+      break;
+    }
+  }
+  if (!paceUnlocked && bestPace < 999) {
+    paceBadges.forEach(badge => {
+      if (bestPace >= badge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `Objectif : ${badge.getPaceStr(badge.threshold - 0.01)}/km`
+        });
+      }
     });
-  } else if (bestPace > 0 && bestPace < 5.5) {
-    const paceMin = Math.floor(bestPace);
-    const paceSec = Math.round((bestPace % 1) * 60);
-    badges.push({ 
-      icon: '<img src="/530.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Rapide', 
-      desc: 'Allure sous 5:30/km, tu as de belles capacités !',
-      stats: `Record : ${paceMin}:${String(paceSec).padStart(2, '0')}/km`
+  } else if (paceUnlocked) {
+    const currentBadge = paceBadges.find(b => bestPace < b.threshold);
+    paceBadges.forEach(badge => {
+      if (badge.threshold < currentBadge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `Objectif : ${badge.getPaceStr(badge.threshold - 0.01)}/km`
+        });
+      }
     });
   }
   
-  // Badge longue distance
+  // BADGES LONGUE DISTANCE
   const longestRun = runs.reduce((longest, run) => run.distance > (longest.distance || 0) ? run : longest, runs[0] || {});
-  if (longestRun.distance >= 42195) {
-    badges.push({ 
-      icon: '🏅', 
-      name: 'Marathonien', 
-      desc: 'Tu as bouclé 42.195 km ! Les 26 miles mythiques.',
-      stats: `Plus longue sortie : ${(longestRun.distance / 1000).toFixed(2)} km`
+  const longestDistance = longestRun.distance || 0;
+  
+  const longDistanceBadges = [
+    { threshold: 21000, level: 2, icon: '<img src="/semi.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Semi-Marathonien', desc: 'Semi-marathon accompli ! 21.1 km de dépassement de soi.' },
+    { threshold: 42195, level: 3, icon: '🏅', name: 'Marathonien', desc: 'Tu as bouclé 42.195 km ! Les 26 miles mythiques.' }
+  ];
+  
+  let longDistUnlocked = false;
+  for (let i = longDistanceBadges.length - 1; i >= 0; i--) {
+    if (longestDistance >= longDistanceBadges[i].threshold) {
+      unlocked.push({
+        ...longDistanceBadges[i],
+        stats: `Plus longue sortie : ${(longestDistance / 1000).toFixed(2)} km`
+      });
+      longDistUnlocked = true;
+      break;
+    }
+  }
+  if (!longDistUnlocked) {
+    longDistanceBadges.forEach(badge => {
+      if (longestDistance < badge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${((badge.threshold - longestDistance) / 1000).toFixed(2)} km restants`
+        });
+      }
     });
-  } else if (longestRun.distance >= 21000) {
-    badges.push({ 
-      icon: '<img src="/semi.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Semi-Marathonien', 
-      desc: 'Semi-marathon accompli ! 21.1 km de dépassement de soi.',
-      stats: `Plus longue sortie : ${(longestRun.distance / 1000).toFixed(2)} km`
+  } else {
+    const currentBadge = longDistanceBadges.find(b => longestDistance >= b.threshold);
+    longDistanceBadges.forEach(badge => {
+      if (badge.threshold > currentBadge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${((badge.threshold - longestDistance) / 1000).toFixed(2)} km restants`
+        });
+      }
     });
   }
   
-  // Badge régularité (courses cette semaine)
+  // BADGES RÉGULARITÉ
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
   const runsThisWeek = runs.filter(r => new Date(r.start_date) > oneWeekAgo).length;
   
-  if (runsThisWeek >= 4) {
-    badges.push({ 
-      icon: '<img src="/4courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Ultra Régulier', 
-      desc: '4+ sorties cette semaine ! Discipline de fer, bravo.',
-      stats: `${runsThisWeek} courses cette semaine`
+  const regularityBadges = [
+    { threshold: 3, level: 1, icon: '<img src="/3courses.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Régulier', desc: '3+ sorties hebdo, tu maintiens un bon rythme !' },
+    { threshold: 4, level: 2, icon: '<img src="/4courses.png" alt="Mon logo" style="width:200px; height:200px;">', name: 'Ultra Régulier', desc: '4+ sorties cette semaine ! Discipline de fer, bravo.' }
+  ];
+  
+  let regularityUnlocked = false;
+  for (let i = regularityBadges.length - 1; i >= 0; i--) {
+    if (runsThisWeek >= regularityBadges[i].threshold) {
+      unlocked.push({
+        ...regularityBadges[i],
+        stats: `${runsThisWeek} courses cette semaine`
+      });
+      regularityUnlocked = true;
+      break;
+    }
+  }
+  if (!regularityUnlocked) {
+    regularityBadges.forEach(badge => {
+      if (runsThisWeek < badge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${badge.threshold - runsThisWeek} courses cette semaine`
+        });
+      }
     });
-  } else if (runsThisWeek >= 3) {
-    badges.push({ 
-      icon: '<img src="/3courses.png" alt="Mon logo" style="width:200px; height:200px;">', 
-      name: 'Régulier', 
-      desc: '3+ sorties hebdo, tu maintiens un bon rythme !',
-      stats: `${runsThisWeek} courses cette semaine`
+  } else {
+    const currentBadge = regularityBadges.find(b => runsThisWeek >= b.threshold);
+    regularityBadges.forEach(badge => {
+      if (badge.threshold > currentBadge.threshold) {
+        locked.push({
+          ...badge,
+          requirement: `${badge.threshold - runsThisWeek} courses cette semaine`
+        });
+      }
     });
   }
   
-  return badges;
+  return { unlocked, locked };
 }
 
 // PAGE ANALYSES AVANCEES
